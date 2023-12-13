@@ -1,0 +1,65 @@
+class tcp_client
+{
+public:
+    
+    tcp_client(boost::asio::io_service& io, 
+        const std::string& server, const std::string& nickname)
+        : io_(io), socket_(io), 
+        server_(server), 
+        nickname_(nickname)
+    {
+        if (!login()) throw std::runtime_error("Unable connect to server!");
+    }
+
+private:
+
+    bool login()
+    {
+        boost::system::error_code error;
+        socket_.connect(tcp::endpoint(boost::asio::ip::make_address(server_), 8080), error);
+
+        if (error) return false;
+
+        // boost::asio::async_write(socket_, boost::asio::buffer(nickname_),
+        //     [this](const::boost::system::error_code& ec, size_t len)
+        //     {
+        //         if (!ec) start_read();
+        //     });
+
+        boost::asio::write(socket_, boost::asio::buffer(nickname_), error);
+
+        if (error) return false;
+
+        start_read();
+
+        return true;
+    }
+
+    void start_read()
+    {
+        std::cout << "here!\n";
+
+        std::cout << socket_.is_open() << std::endl;
+
+        boost::asio::async_read(socket_, 
+            boost::asio::buffer(recv_buffer_),
+            [this](const boost::system::error_code& ec, size_t)
+            {
+                std::cout << "Inside!\n";
+                if (!ec) 
+                {
+                    std::cout << recv_buffer_.data() << std::endl;
+                    start_read();
+                }
+                else std::cout << ec.message() << std::endl;
+            });
+    }
+
+private:
+
+    std::string nickname_;
+    std::string server_;
+    tcp::socket socket_;
+    boost::array<char, 256> recv_buffer_;
+    boost::asio::io_service& io_;
+};
