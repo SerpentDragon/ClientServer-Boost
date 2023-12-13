@@ -16,10 +16,10 @@ struct Client
     std::string name_;
     boost::shared_ptr<tcp::socket> socket_;
     boost::array<char, 256> recv_buffer_;
-
-    explicit Client(const std::string& name, 
-                    boost::shared_ptr<tcp::socket> socket)
-                : name_(name), socket_(socket)
+    explicit Client(boost::asio::io_service& io,
+        const std::string& name = "")
+        : name_(name), 
+        socket_(new tcp::socket(io))
     {
     }
 };
@@ -33,7 +33,6 @@ public:
     tcp_server(boost::asio::io_service& io)
         : io_(io),
         acceptor_(io, tcp::endpoint(tcp::v4(), 8080))
-        , socket_(io)
     {
         start_accept();
     }
@@ -42,7 +41,9 @@ private:
 
     void start_accept()
     {
-        acceptor_.async_accept(socket_,
+        clients.push_back(Client(io_));
+
+        acceptor_.async_accept(*clients[clients.size() - 1].socket_,
             [this](const boost::system::error_code& error)
             {
                 if (!error)
@@ -57,7 +58,7 @@ private:
     {
         boost::shared_ptr<boost::array<char, 128>> client_nickname(new boost::array<char, 128>);
 
-        socket_.async_receive(boost::asio::buffer(*client_nickname),
+        clients[clients.size() - 1].socket_->async_receive(boost::asio::buffer(*client_nickname),
             [this, client_nickname](const boost::system::error_code& error, size_t)
             {
                 if (!error) 
@@ -66,8 +67,11 @@ private:
 
                     boost::shared_ptr<std::string> success_message(new std::string("Connected to me!"));
 
-                    socket_.async_send(boost::asio::buffer(*success_message),
-                        [](const boost::system::error_code& error, size_t){});
+                    clients[clients.size() - 2].socket_->async_send(boost::asio::buffer(*success_message),
+                        [](const boost::system::error_code& error, size_t)
+                        {
+                            if (error) std::cerr << error.message() << std::endl;
+                        });
                 }
             });
 
@@ -78,8 +82,6 @@ private:
 
     boost::asio::io_service& io_;
     tcp::acceptor acceptor_;
-
-    tcp::socket socket_;
 };
 
 int main()
