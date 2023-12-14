@@ -88,7 +88,6 @@ private:
                     for(size_t i = 0; i < clients.size(); i++)
                     {
                         clients[i].socket_->send(boost::asio::buffer(*buff), 0, ignored_error);
-                        // std::cout << clients[index].recv_buffer_.data() << std::endl;
                     }
 
                     start_read(index);
