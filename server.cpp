@@ -3,11 +3,8 @@
 #include <iostream>
 #include <boost/asio.hpp>
 #include <boost/array.hpp>
-#include <boost/bind/bind.hpp>
-#include <boost/move/move.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
-#include <boost/enable_shared_from_this.hpp>
 
 using boost::asio::ip::tcp;
 
@@ -73,12 +70,31 @@ private:
                 new std::string("Successfuly connected to server. Start messaging!"));
         boost::system::error_code ignored_error;
 
-        clients[clients.size() - 1].socket_->send(boost::asio::buffer(*success_message), 0, ignored_error);
+        new_socket->send(boost::asio::buffer(*success_message), 0, ignored_error);
+
+        start_read(clients.size() - 1);
     }
 
     void start_read(size_t index)
     {
- 
+        clients[index].socket_->async_receive(boost::asio::buffer(clients[index].recv_buffer_), 
+            [this, index](const boost::system::error_code& error, size_t)
+            {
+                if (!error) 
+                {
+                    auto buff = boost::make_shared<boost::array<char, 256>>(clients[index].recv_buffer_);
+                    boost::system::error_code ignored_error;
+
+                    for(size_t i = 0; i < clients.size(); i++)
+                    {
+                        clients[i].socket_->send(boost::asio::buffer(*buff), 0, ignored_error);
+                        // std::cout << clients[index].recv_buffer_.data() << std::endl;
+                    }
+
+                    start_read(index);
+                }
+                else std::cerr << "Error during message forwarding: " << error.message() << std::endl;
+            });
     }
 
 
