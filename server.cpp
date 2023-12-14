@@ -14,12 +14,12 @@ using boost::asio::ip::tcp;
 struct Client
 {
     std::string name_;
-    boost::shared_ptr<tcp::socket> socket_;
+    tcp::socket socket_;
     boost::array<char, 256> recv_buffer_;
+
     explicit Client(boost::asio::io_service& io,
         const std::string& name = "")
-        : name_(name), 
-        socket_(new tcp::socket(io))
+        : name_(name), socket_(io)
     {
     }
 };
@@ -43,13 +43,10 @@ private:
     {
         clients.push_back(Client(io_));
 
-        acceptor_.async_accept(*clients[clients.size() - 1].socket_,
+        acceptor_.async_accept(clients[clients.size() - 1].socket_,
             [this](const boost::system::error_code& error)
             {
-                if (!error)
-                {
-                    handle_accept(clients.size() - 1);
-                }
+                if (!error) handle_accept(clients.size() - 1);
                 else std::cout << "Error during accepting: " << error.message() << std::endl;
             });
     }
@@ -58,7 +55,7 @@ private:
     {
         boost::shared_ptr<boost::array<char, 128>> client_nickname(new boost::array<char, 128>);
 
-        clients[index].socket_->async_receive(boost::asio::buffer(*client_nickname),
+        clients[index].socket_.async_receive(boost::asio::buffer(*client_nickname),
             [this, client_nickname, index](const boost::system::error_code& error, size_t)
             {
                 if (!error) login_client(index, client_nickname->data());
@@ -72,12 +69,36 @@ private:
     {
         clients[index].name_ = nickname;
 
-        boost::shared_ptr<std::string> success_message(new std::string("Successfuly connected to server. Start messaging!"));
-        clients[index].socket_->async_send(boost::asio::buffer(*success_message),
-            [](const boost::system::error_code& error, size_t)
+        boost::shared_ptr<std::string> success_message(
+                new std::string("Successfuly connected to server. Start messaging!"));
+
+        clients[index].socket_.async_send(boost::asio::buffer(*success_message),
+            [](const boost::system::error_code& error, size_t){});
+
+        start_read(index);
+    }
+
+    void start_read(size_t index)
+    {
+        clients[index].socket_.async_receive(boost::asio::buffer(clients[index].recv_buffer_),
+            [index](const boost::system::error_code& error, size_t)
             {
-                if (error) std::cerr << error.message() << std::endl;
+                if (!error)
+                {
+                    for(size_t i = 0; i < clients.size(); i++)
+                    {
+                        if (i != index)
+                        {
+                            boost::system::error_code ignored_error;
+                            clients[i].socket_.write_some(
+                                    boost::asio::buffer(clients[index].recv_buffer_), ignored_error);
+                        }
+                    }
+                }
+                else std::cerr << "Error during forwarding message: " << error.message() << std::endl;
             });
+
+        start_read(index);
     }
 
 
