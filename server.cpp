@@ -48,35 +48,38 @@ private:
             {
                 if (!error)
                 {
-                    std::cout << "Accepted!\n";
-                    handle_accept();
+                    handle_accept(clients.size() - 1);
                 }
+                else std::cout << "Error during accepting: " << error.message() << std::endl;
             });
     }
 
-    void handle_accept()
+    void handle_accept(size_t index)
     {
         boost::shared_ptr<boost::array<char, 128>> client_nickname(new boost::array<char, 128>);
 
-        clients[clients.size() - 1].socket_->async_receive(boost::asio::buffer(*client_nickname),
-            [this, client_nickname](const boost::system::error_code& error, size_t)
+        clients[index].socket_->async_receive(boost::asio::buffer(*client_nickname),
+            [this, client_nickname, index](const boost::system::error_code& error, size_t)
             {
-                if (!error) 
-                {
-                    std::cout << client_nickname->data() << std::endl;
-
-                    boost::shared_ptr<std::string> success_message(new std::string("Connected to me!"));
-
-                    clients[clients.size() - 2].socket_->async_send(boost::asio::buffer(*success_message),
-                        [](const boost::system::error_code& error, size_t)
-                        {
-                            if (error) std::cerr << error.message() << std::endl;
-                        });
-                }
+                if (!error) login_client(index, client_nickname->data());
+                else  std::cerr << "Error during getting a nickname: " << error.message() << std::endl;
             });
 
         start_accept();
     }
+
+    void login_client(size_t index, const std::string& nickname)
+    {
+        clients[index].name_ = nickname;
+
+        boost::shared_ptr<std::string> success_message(new std::string("Successfuly connected to server. Start messaging!"));
+        clients[index].socket_->async_send(boost::asio::buffer(*success_message),
+            [](const boost::system::error_code& error, size_t)
+            {
+                if (error) std::cerr << error.message() << std::endl;
+            });
+    }
+
 
 private:
 
