@@ -18,6 +18,7 @@ struct Client
         const std::string& name = "")
         : name_(name), socket_(socket)
     {
+        this->recv_buffer_.fill(0);
     }
 };
 
@@ -44,7 +45,7 @@ private:
             [this, new_socket](const boost::system::error_code& error)
             {
                 if (!error) handle_accept(new_socket);
-                else std::cout << "Error during accepting: " << error.message() << std::endl;
+                else std::cerr << "Error during accepting: " << error.message() << std::endl;
             });
     }
 
@@ -66,11 +67,15 @@ private:
     {
         clients.emplace_back(Client(new_socket, nickname));
 
-        boost::shared_ptr<std::string> success_message(
-                new std::string("Successfuly connected to server. Start messaging!"));
+        std::string welcome_message = "Successfuly connected to server. Start messaging!";
         boost::system::error_code ignored_error;
+        new_socket->send(boost::asio::buffer(welcome_message), 0, ignored_error);
 
-        new_socket->send(boost::asio::buffer(*success_message), 0, ignored_error);
+        std::string join_message = nickname + " joined the chat!\n";
+        for(size_t i = 0; i < clients.size() - 1; i++)
+        {
+            clients[i].socket_->send(boost::asio::buffer(join_message), 0, ignored_error);
+        }
 
         start_read(clients.size() - 1);
     }
@@ -82,13 +87,17 @@ private:
             {
                 if (!error) 
                 {
-                    auto buff = boost::make_shared<boost::array<char, 256>>(clients[index].recv_buffer_);
+                    std::string message = "From: " + clients[index].name_ + 
+                        "\nMessage: " + clients[index].recv_buffer_.data() + "\n";
                     boost::system::error_code ignored_error;
 
                     for(size_t i = 0; i < clients.size(); i++)
                     {
-                        clients[i].socket_->send(boost::asio::buffer(*buff), 0, ignored_error);
+                        if (i != index)
+                            clients[i].socket_->send(boost::asio::buffer(message), 0, ignored_error);
                     }
+
+                    clients[index].recv_buffer_.fill(0);
 
                     start_read(index);
                 }

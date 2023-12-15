@@ -1,4 +1,5 @@
 #include <string>
+#include <thread>
 #include <iostream>
 #include <boost/asio.hpp>
 #include <boost/array.hpp>
@@ -14,18 +15,24 @@ public:
     tcp_client(boost::asio::io_service& io,
             const std::string& server, const std::string& nickname)
         : io_(io), server_ip_(server), nickname_(nickname), 
-        socket_(io), resolver_(io),
-        recv_buffer_(new boost::array<char, 256>)
+        socket_(io)
     {
+        recv_buffer_.fill(0);
         login();
+    }
+
+    ~tcp_client()
+    {
+        write_thread_.join();
     }
 
 private:
 
     void login()
     {
+        tcp::resolver resolver(io_);
         tcp::resolver::query query(server_ip_, "8080");
-        tcp::resolver::results_type endpoints = resolver_.resolve(query);
+        tcp::resolver::results_type endpoints = resolver.resolve(query);
 
         socket_.async_connect(tcp::endpoint(boost::asio::ip::make_address(server_ip_), 8080),
             [this](const boost::system::error_code& error)
@@ -37,20 +44,25 @@ private:
                         {
                             if (!error) 
                             {
-                                start_read();
-                                // start_write();  
+                                write_thread_ = std::thread(std::bind(&tcp_client::start_write, this));
+                                start_read();     
                             }
                         });
                 }
+                else std::cerr << "Error connecting to server: " << error.message() << std::endl;
             });
     }
 
     void start_read()
     {
-        socket_.async_receive(boost::asio::buffer(*recv_buffer_),
+        socket_.async_receive(boost::asio::buffer(recv_buffer_),
             [this](const boost::system::error_code& error, size_t)
             {
-                if (!error) std::cout << recv_buffer_->data() << std::endl;
+                if (!error) 
+                {
+                    std::cout << recv_buffer_.data() << std::endl;
+                    recv_buffer_.fill(0);
+                }
                 else std::cerr << "Error during reading: " << error.message() << std::endl;
 
                 start_read();
@@ -59,29 +71,31 @@ private:
 
     void start_write()
     {
-        std::string message;
-        std::getline(std::cin, message);
+        boost::system::error_code ignored_error;
 
-        // auto message_ptr = boost::make_shared<std::string>(message);
+        while(true)
+        {
+            std::string message;
+            std::getline(std::cin, message);
 
-        socket_.async_send(boost::asio::buffer(message),
-            [this](const boost::system::error_code& error, size_t)
-            {
-                if (error) std::cerr << "Error: " << error.message() << std::endl;
-                else std::cout << "Data sent!\n";
+            if (message == "#") break;
 
-                start_write();
-            });
+            socket_.send(boost::asio::buffer(message), 0, ignored_error);
+        }
     }
 
 private:
 
     boost::asio::io_service& io_;
+
     std::string server_ip_;
     std::string nickname_;
+
     tcp::socket socket_;
-    tcp::resolver resolver_;
-    boost::shared_ptr<boost::array<char, 256>> recv_buffer_;
+
+    boost::array<char, 256> recv_buffer_;
+
+    std::thread write_thread_;
 };
 
 int main(int argc, char** argv)
@@ -96,8 +110,6 @@ int main(int argc, char** argv)
 
         boost::asio::io_service io;
         tcp_client client(io, argv[1], argv[2]);
-
-
         io.run();
     }
     catch(const std::exception& e)
