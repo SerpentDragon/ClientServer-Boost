@@ -14,8 +14,8 @@ public:
 
     tcp_client(boost::asio::io_service& io,
             const std::string& server, const std::string& nickname)
-        : io_(io), server_ip_(server), nickname_(nickname), 
-        socket_(io)
+        : io_(io), server_ip_(server), 
+        nickname_(nickname), socket_(io)
     {
         recv_buffer_.fill(0);
         login();
@@ -78,7 +78,7 @@ private:
             std::string message;
             std::getline(std::cin, message);
 
-            if (message == "#") break;
+            if (message == "#") break; // io_.stop();
 
             socket_.send(boost::asio::buffer(message), 0, ignored_error);
         }
