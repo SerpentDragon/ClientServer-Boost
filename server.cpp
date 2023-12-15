@@ -1,6 +1,6 @@
 #include <string>
-#include <vector>
 #include <iostream>
+#include <unordered_map>
 #include <boost/asio.hpp>
 #include <boost/array.hpp>
 #include <boost/shared_ptr.hpp>
@@ -18,9 +18,20 @@ struct Client
         : name_(name), socket_(socket)
     {
     }
+
+    Client() = default;
 };
 
-std::vector<Client> clients;
+std::unordered_map<int, Client> clients;
+
+std::string participants()
+{
+    std::string list_of_clients = "List of Clients:\n";
+    for(const auto& client : clients) 
+        list_of_clients += client.second.name_ + "\n";
+
+    return list_of_clients;
+}
 
 class tcp_server
 {
@@ -63,7 +74,8 @@ private:
 
     void login_client(boost::shared_ptr<tcp::socket> new_socket, const std::string& nickname)
     {
-        clients.emplace_back(Client(new_socket, nickname));
+        size_t last_position = clients.size();
+        clients.insert({last_position, Client(new_socket, nickname)});
 
         std::string welcome_message = "Successfuly connected to server. Start messaging!";
         std::string join_message = nickname + " joined the chat!\n";
@@ -75,9 +87,9 @@ private:
             clients[i].socket_->send(boost::asio::buffer(join_message), 0, ignored_error);
         }
 
-        start_read(clients.size() - 1);
+        start_read(last_position);
     }
-
+    
     void start_read(size_t index)
     {
         auto received_message = boost::make_shared<boost::array<char, 256>>(boost::array<char, 256>());
@@ -87,22 +99,60 @@ private:
             {
                 if (!error) 
                 {
-                    std::string message = "From: " + clients[index].name_ + 
-                        "\nMessage: " + received_message->data() + "\n";
-                    boost::system::error_code ignored_error;
-
-                    for(size_t i = 0; i < clients.size(); i++)
-                    {
-                        if (i != index)
-                            clients[i].socket_->send(boost::asio::buffer(message), 0, ignored_error);
-                    }
-
-                    start_read(index);
+                    std::string message = received_message->data();
+                    handle_read(index, message);
                 }
-                else std::cerr << "Error during message forwarding: " << error.message() << std::endl;
+                else 
+                {
+                    if (error == boost::asio::error::connection_refused) logout_client(index);
+                    else if (error != boost::asio::error::eof)
+                        std::cerr << "Error during message forwarding: " << error.message() << std::endl;
+                }
             });
     }
 
+    void handle_read(size_t sender, std::string& message)
+    {
+        if (message == "#") logout_client(sender);
+        else
+        {
+            if (message == "list!") 
+            {
+                message = participants();
+                clients[sender].socket_->send(boost::asio::buffer(message), 0);
+            }
+            else 
+            {
+                message = "From: " + clients[sender].name_ + "\nMessage: " + message + "\n";
+                for(const auto& client : clients) 
+                {
+                    if (client.first != sender)
+                        client.second.socket_->send(boost::asio::buffer(message), 0);
+                }
+            }
+
+            start_read(sender);
+        }
+    }
+
+    void logout_client(size_t sender)
+    {  
+        std::string answer = clients[sender].name_ + " left the chat!\n";
+        for(const auto& client : clients)
+        {
+            if (client.first != sender)
+                client.second.socket_->send(boost::asio::buffer(answer), 0);
+        }  
+             
+        for(auto it = clients.begin(); it != clients.end(); it++)
+        {
+            if (it->first == sender)
+            {
+                clients.erase(it);
+                break;
+            }
+        }   
+    }
 
 private:
 
