@@ -63,7 +63,11 @@ private:
                     std::cout << recv_buffer_.data() << std::endl;
                     recv_buffer_.fill(0);
                 }
-                else std::cerr << "Error during reading: " << error.message() << std::endl;
+                else if (error == boost::asio::error::eof)
+                {
+                    std::cerr << "Server connection is broken!\n";
+                    io_.stop();
+                }
 
                 start_read();
             });
@@ -78,9 +82,13 @@ private:
             std::string message;
             std::getline(std::cin, message);
 
-            if (message == "#") break; // io_.stop();
-
             socket_.send(boost::asio::buffer(message), 0, ignored_error);
+
+            if (message == "#")
+            {
+                io_.stop();
+                break;
+            }
         }
     }
 
@@ -111,6 +119,8 @@ int main(int argc, char** argv)
         boost::asio::io_service io;
         tcp_client client(io, argv[1], argv[2]);
         io.run();
+
+        std::cout << "Exit!\n";
     }
     catch(const std::exception& e)
     {
