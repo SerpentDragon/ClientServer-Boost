@@ -1,6 +1,6 @@
+#include <map>
 #include <string>
 #include <iostream>
-#include <unordered_map>
 #include <boost/asio.hpp>
 #include <boost/array.hpp>
 #include <boost/shared_ptr.hpp>
@@ -22,7 +22,7 @@ struct Client
     Client() = default;
 };
 
-std::unordered_map<int, Client> clients;
+std::map<size_t, Client> clients;
 
 std::string participants()
 {
@@ -31,6 +31,12 @@ std::string participants()
         list_of_clients += client.second.name_ + "\n";
 
     return list_of_clients;
+}
+
+size_t make_id()
+{
+    if (clients.empty()) return 0;
+    else return clients.rbegin()->first + 1;
 }
 
 class tcp_server
@@ -74,24 +80,25 @@ private:
 
     void login_client(boost::shared_ptr<tcp::socket> new_socket, const std::string& nickname)
     {
-        size_t last_position = clients.size();
-        clients.insert({last_position, Client(new_socket, nickname)});
+        size_t new_id = make_id();
+        clients.insert({new_id, Client(new_socket, nickname)});
 
         std::string welcome_message = "Successfuly connected to server. Start messaging!";
         std::string join_message = nickname + " joined the chat!\n";
         boost::system::error_code ignored_error;
 
         new_socket->send(boost::asio::buffer(welcome_message), 0, ignored_error);        
-        for(size_t i = 0; i < clients.size() - 1; i++)
+        for(const auto& client : clients)
         {
-            clients[i].socket_->send(boost::asio::buffer(join_message), 0, ignored_error);
+            if (client.first != new_id)
+                client.second.socket_->send(boost::asio::buffer(join_message), 0, ignored_error);
         }
 
-        start_read(last_position);
+        start_read(new_id);
     }
     
     void start_read(size_t index)
-    {
+    {      
         auto received_message = boost::make_shared<boost::array<char, 256>>(boost::array<char, 256>());
 
         clients[index].socket_->async_receive(boost::asio::buffer(*received_message), 
@@ -104,8 +111,9 @@ private:
                 }
                 else 
                 {
-                    if (error == boost::asio::error::connection_refused) logout_client(index);
-                    else if (error != boost::asio::error::eof)
+                    if (error == boost::asio::error::connection_refused || 
+                        error == boost::asio::error::eof) logout_client(index);
+                    else if (error)
                         std::cerr << "Error during message forwarding: " << error.message() << std::endl;
                 }
             });
