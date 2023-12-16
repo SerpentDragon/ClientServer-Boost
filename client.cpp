@@ -3,6 +3,7 @@
 #include <iostream>
 #include <boost/asio.hpp>
 #include <boost/array.hpp>
+#include <boost/thread.hpp>
 #include <boost/bind/bind.hpp>
 #include <boost/make_shared.hpp>
 
@@ -18,12 +19,14 @@ public:
         nickname_(nickname), socket_(io)
     {
         recv_buffer_.fill(0);
+        thread_active_ = true;
         login();
     }
 
     ~tcp_client()
     {
-        write_thread_.join();
+        if (write_thread_.joinable())
+            write_thread_.join();
     }
 
 private:
@@ -44,7 +47,7 @@ private:
                         {
                             if (!error) 
                             {
-                                write_thread_ = std::thread(std::bind(&tcp_client::start_write, this));
+                                write_thread_ = std::thread([this](){ start_write(); });
                                 start_read();     
                             }
                         });
@@ -66,6 +69,7 @@ private:
                 else if (error == boost::asio::error::eof)
                 {
                     std::cerr << "Server connection is broken!\n";
+                    thread_active_ = false;                    
                     io_.stop();
                 }
 
@@ -76,12 +80,11 @@ private:
     void start_write()
     {
         boost::system::error_code ignored_error;
+        std::string message;
 
-        while(true)
+        while(thread_active_)
         {
-            std::string message;
             std::getline(std::cin, message);
-
             socket_.send(boost::asio::buffer(message), 0, ignored_error);
 
             if (message == "#")
@@ -89,7 +92,7 @@ private:
                 io_.stop();
                 break;
             }
-        }
+        }      
     }
 
 private:
@@ -100,10 +103,10 @@ private:
     std::string nickname_;
 
     tcp::socket socket_;
-
     boost::array<char, 256> recv_buffer_;
 
-    std::thread write_thread_;
+    std::thread write_thread_;  
+    bool thread_active_;
 };
 
 int main(int argc, char** argv)
@@ -118,9 +121,8 @@ int main(int argc, char** argv)
 
         boost::asio::io_service io;
         tcp_client client(io, argv[1], argv[2]);
+        
         io.run();
-
-        std::cout << "Exit!\n";
     }
     catch(const std::exception& e)
     {
