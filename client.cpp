@@ -6,16 +6,19 @@
 #include <boost/thread.hpp>
 #include <boost/bind/bind.hpp>
 #include <boost/make_shared.hpp>
+#include <boost/program_options.hpp>
 
 using boost::asio::ip::tcp;
+namespace po = boost::program_options;
 
 class tcp_client
 {
 public:
 
     tcp_client(boost::asio::io_service& io,
-            const std::string& server, const std::string& nickname)
-        : io_(io), server_ip_(server), 
+            const std::string& server, const int port,
+            const std::string& nickname)
+        : io_(io), server_ip_(server), port_(port),
         nickname_(nickname), socket_(io)
     {
         recv_buffer_.fill(0);
@@ -34,7 +37,7 @@ private:
     void login()
     {
         tcp::resolver resolver(io_);
-        tcp::resolver::query query(server_ip_, "8080");
+        tcp::resolver::query query(server_ip_, std::to_string(port_));
         tcp::resolver::results_type endpoints = resolver.resolve(query);
 
         socket_.async_connect(tcp::endpoint(boost::asio::ip::make_address(server_ip_), 8080),
@@ -100,6 +103,7 @@ private:
     boost::asio::io_service& io_;
 
     std::string server_ip_;
+    int port_;
     std::string nickname_;
 
     tcp::socket socket_;
@@ -111,22 +115,36 @@ private:
 
 int main(int argc, char** argv)
 {
+    po::options_description desc("Allowed options");
+
     try
     {
-        if (argc != 3)
-        {
-            std::cerr << "Usage: ./client <host> <clients_name>" << std::endl;
-            return 1;
-        }
+        desc.add_options()
+            ("help,h", "produce help message")
+            ("host,H", po::value<std::string>()->required(), "host to connect : required")
+            ("port,p", po::value<int>()->required(), "port to connect : required")
+            ("name,n", po::value<std::string>()->required(), "client's name : required");
+
+        po::variables_map vm;
+        po::store(po::parse_command_line(argc, argv, desc), vm);
+        po::notify(vm);
 
         boost::asio::io_service io;
-        tcp_client client(io, argv[1], argv[2]);
+        tcp_client client(io, vm["host"].as<std::string>(), 
+            vm["port"].as<int>(), vm["name"].as<std::string>());
         
         io.run();
     }
-    catch(const std::exception& e)
+    catch(const po::required_option& ex)
     {
-        std::cerr << e.what() << '\n';
+        std::cerr << "Error: the '" << ex.get_option_name() << 
+            "' parameter is required" << std::endl;
+        std::cerr << desc << std::endl;
+        return 1;
+    }
+    catch(const std::exception& ex)
+    {
+        std::cerr << ex.what() << '\n';
     }
 
     return 0;

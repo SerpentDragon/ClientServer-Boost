@@ -5,8 +5,10 @@
 #include <boost/array.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
+#include <boost/program_options.hpp>
 
 using boost::asio::ip::tcp;
+namespace po = boost::program_options;
 
 struct Client
 {
@@ -43,9 +45,9 @@ class tcp_server
 {
 
 public:
-    tcp_server(boost::asio::io_service& io)
-        : io_(io),
-        acceptor_(io, tcp::endpoint(tcp::v4(), 8080))
+    tcp_server(boost::asio::io_service& io, const int port)
+        : io_(io), port_(port),
+        acceptor_(io, tcp::endpoint(tcp::v4(), port))
     {
         start_accept();
     }
@@ -166,15 +168,33 @@ private:
 
     boost::asio::io_service& io_;
     tcp::acceptor acceptor_;
+    int port_;
 };
 
-int main()
+int main(int argc, char** argv)
 {
+    po::options_description desc("Allowed options");
+
     try
     {
+        desc.add_options()
+            ("help", "produce help message")
+            ("port,p", po::value<int>()->required(), "port to run on : required");
+        
+        po::variables_map vm;
+        po::store(po::parse_command_line(argc, argv, desc), vm);
+        po::notify(vm);
+
         boost::asio::io_service io;
-        tcp_server server(io);
+        tcp_server server(io, vm["port"].as<int>());
         io.run();
+    }
+    catch(const po::required_option& ex)
+    {
+        std::cerr << "Error: the '" << ex.get_option_name() << 
+            "' parameter is required" << std::endl;
+        std::cerr << desc << std::endl;
+        return 1;
     }
     catch(const std::exception& e)
     {
