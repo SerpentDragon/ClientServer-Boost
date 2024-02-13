@@ -7,13 +7,13 @@ This simple application allows you to connect multiple clients in one chat. Clie
 send messages to each other.  
 
 ### Build and Rund
-To build this application you may use CMakeLists from this repo. After the project is build, one of the clients has to run the server using
+To build this application you may use CMakeLists from this repo. After the project is built, one of the clients has to run the server using
 ```
 ./server -p [ --port ] PORT
 ```
 command. You have to specify port this server will run on.
 
-When the server is up you may connect to it and send mesages. To do it, launch your client app. You have to specify host on which the server is runnng, the port to connect and your nickname.
+When the server is up, you may connect to it and send mesages. To do it, launch your client app. You have to specify host on which the server is running, the port to connect and your nickname.
 ```
 ./client -H [ --host ] HOST -p [ -- port] PORT -n [ --name ] nickname
 ```
