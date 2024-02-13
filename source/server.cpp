@@ -10,36 +10,6 @@
 using boost::asio::ip::tcp;
 namespace po = boost::program_options;
 
-struct Client
-{
-    std::string name_;
-    boost::shared_ptr<tcp::socket> socket_;
-
-    explicit Client(boost::shared_ptr<tcp::socket> socket,
-        const std::string& name = "")
-        : name_(name), socket_(socket)
-    {
-    }
-
-    Client() = default;
-};
-
-std::map<size_t, Client> clients;
-
-std::string participants()
-{
-    std::string list_of_clients = "List of Clients:\n";
-    for(const auto& client : clients) 
-        list_of_clients += client.second.name_ + "\n";
-
-    return list_of_clients;
-}
-
-size_t make_id()
-{
-    if (clients.empty()) return 0;
-    else return clients.rbegin()->first + 1;
-}
 
 class tcp_server
 {
@@ -83,14 +53,14 @@ private:
     void login_client(boost::shared_ptr<tcp::socket> new_socket, const std::string& nickname)
     {
         size_t new_id = make_id();
-        clients.insert({new_id, Client(new_socket, nickname)});
+        clients_.insert({new_id, Client(new_socket, nickname)});
 
         std::string welcome_message = "Successfuly connected to server. Start messaging!";
         std::string join_message = nickname + " joined the chat!\n";
         boost::system::error_code ignored_error;
 
         new_socket->send(boost::asio::buffer(welcome_message), 0, ignored_error);        
-        for(const auto& client : clients)
+        for(const auto& client : clients_)
         {
             if (client.first != new_id)
                 client.second.socket_->send(boost::asio::buffer(join_message), 0, ignored_error);
@@ -103,7 +73,7 @@ private:
     {      
         auto received_message = boost::make_shared<boost::array<char, 256>>(boost::array<char, 256>());
 
-        clients[index].socket_->async_receive(boost::asio::buffer(*received_message), 
+        clients_[index].socket_->async_receive(boost::asio::buffer(*received_message), 
             [this, index, received_message](const boost::system::error_code& error, size_t len)
             {
                 if (!error) 
@@ -129,12 +99,12 @@ private:
             if (message == "list!") 
             {
                 message = participants();
-                clients[sender].socket_->send(boost::asio::buffer(message), 0);
+                clients_[sender].socket_->send(boost::asio::buffer(message), 0);
             }
             else 
             {
-                message = "From: " + clients[sender].name_ + "\nMessage: " + message + "\n";
-                for(const auto& client : clients) 
+                message = "From: " + clients_[sender].name_ + "\nMessage: " + message + "\n";
+                for(const auto& client : clients_) 
                 {
                     if (client.first != sender)
                         client.second.socket_->send(boost::asio::buffer(message), 0);
@@ -147,18 +117,18 @@ private:
 
     void logout_client(size_t sender)
     {  
-        std::string answer = clients[sender].name_ + " left the chat!\n";
-        for(const auto& client : clients)
+        std::string answer = clients_[sender].name_ + " left the chat!\n";
+        for(const auto& client : clients_)
         {
             if (client.first != sender)
                 client.second.socket_->send(boost::asio::buffer(answer), 0);
         }  
              
-        for(auto it = clients.begin(); it != clients.end(); it++)
+        for(auto it = clients_.begin(); it != clients_.end(); it++)
         {
             if (it->first == sender)
             {
-                clients.erase(it);
+                clients_.erase(it);
                 break;
             }
         }   
@@ -166,9 +136,42 @@ private:
 
 private:
 
+    struct Client
+    {
+        std::string name_;
+        boost::shared_ptr<tcp::socket> socket_;
+
+        explicit Client(boost::shared_ptr<tcp::socket> socket,
+            const std::string& name = "")
+            : name_(name), socket_(socket)
+        {
+        }
+
+        Client() = default;
+    };
+
+    std::string participants()
+    {
+        std::string list_of_clients = "List of Clients:\n";
+        for(const auto& client : clients_) 
+            list_of_clients += client.second.name_ + "\n";
+
+        return list_of_clients;
+    }
+
+    size_t make_id()
+    {
+        if (clients_.empty()) return 0;
+        else return clients_.rbegin()->first + 1;
+    }
+
+private:
+
     boost::asio::io_service& io_;
     tcp::acceptor acceptor_;
     int port_;
+
+    std::map<size_t, Client> clients_; 
 };
 
 int main(int argc, char** argv)
