@@ -19,3 +19,8 @@ When the server is up, you may connect to it and send mesages. To do it, launch 
 ```
 
 Congratulations! Now you can chat with your friends!
+
+### Allowed command
+1) To send message just type it and press Enter;
+2) To find out how many client are on-line send "list!" command (without  double-quotes);
+3) To exit the chat just send # symbol.
